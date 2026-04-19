@@ -1,0 +1,150 @@
+--// Load Rayfield
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+--// Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+--// Settings
+local Settings = {
+    ESP = {
+        Enabled = false,
+        ShowBoxes = false,
+        ShowNames = true,
+        ShowDistance = false,
+        MaxDistance = 1000
+    }
+}
+
+--// UI
+local Window = Rayfield:CreateWindow({
+    Name = "Desvire",
+    LoadingTitle = "Loading",
+    LoadingSubtitle = "Rayfield",
+})
+
+local ESPTab = Window:CreateTab("ESP", 4483362458)
+
+-- Toggle helper
+local function toggle(name, key)
+    ESPTab:CreateToggle({
+        Name = name,
+        CurrentValue = Settings.ESP[key],
+        Callback = function(v)
+            Settings.ESP[key] = v
+        end
+    })
+end
+
+toggle("Enable ESP", "Enabled")
+toggle("Boxes", "ShowBoxes")
+toggle("Names", "ShowNames")
+toggle("Distance", "ShowDistance")
+
+ESPTab:CreateSlider({
+    Name = "Max Distance",
+    Range = {100, 5000},
+    Increment = 50,
+    CurrentValue = Settings.ESP.MaxDistance,
+    Callback = function(v)
+        Settings.ESP.MaxDistance = v
+    end
+})
+
+--// ESP System
+local ESPCache = {}
+
+local function createESP(player)
+    if ESPCache[player] or player == LocalPlayer then return end
+
+    local char = player.Character
+    if not char then return end
+
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    -- Highlight (box)
+    local highlight = Instance.new("Highlight")
+    highlight.FillTransparency = 1
+    highlight.OutlineTransparency = 0
+    highlight.Adornee = char
+    highlight.Parent = char
+
+    -- Billboard (above head)
+    local billboard = Instance.new("BillboardGui")
+    billboard.Size = UDim2.new(0, 100, 0, 30)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Parent = root
+
+    -- Name / Distance label
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.TextScaled = false
+    label.TextSize = 14
+    label.Font = Enum.Font.SourceSansBold
+    label.TextStrokeTransparency = 0.5
+    label.TextColor3 = Color3.new(1,1,1)
+    label.TextWrapped = false
+    label.ClipsDescendants = true
+    label.Parent = billboard
+
+    ESPCache[player] = {
+        Highlight = highlight,
+        Billboard = billboard,
+        Label = label
+    }
+end
+
+local function removeESP(player)
+    if ESPCache[player] then
+        for _, v in pairs(ESPCache[player]) do
+            if typeof(v) == "Instance" then
+                v:Destroy()
+            end
+        end
+        ESPCache[player] = nil
+    end
+end
+
+--// Loop
+RunService.RenderStepped:Connect(function()
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            
+            local root = player.Character.HumanoidRootPart
+            local dist = (root.Position - Camera.CFrame.Position).Magnitude
+
+            if Settings.ESP.Enabled and dist <= Settings.ESP.MaxDistance then
+                createESP(player)
+                local esp = ESPCache[player]
+
+                if esp then
+                    esp.Highlight.Enabled = Settings.ESP.ShowBoxes
+
+                    -- Build text
+                    local text = ""
+                    if Settings.ESP.ShowNames then
+                        text = player.Name
+                    end
+                    if Settings.ESP.ShowDistance then
+                        text = text .. (text ~= "" and " | " or "") .. math.floor(dist) .. "m"
+                    end
+
+                    esp.Label.Text = text
+                    esp.Billboard.Enabled = (text ~= "")
+                end
+            else
+                removeESP(player)
+            end
+        else
+            removeESP(player)
+        end
+    end
+end)
+
+Players.PlayerRemoving:Connect(removeESP)
